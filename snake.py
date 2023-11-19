@@ -11,12 +11,17 @@ screen = pygame.display.set_mode((CELL_SIZE * CELL_QUANTITY, CELL_SIZE * CELL_QU
 pygame.display.set_caption('Snake')
 clock = pygame.time.Clock()
 
-global gameActive, score
+global gameActive, score, winning
 score = 0
 gameActive = False
+winning = False
 
 my_font = pygame.font.SysFont('Comic Sans MS', 30)
 score_surf = my_font.render(f'score:{score}', False, (255, 0, 0))
+lose_surf = my_font.render(f'You died!', False, (255, 0, 0))
+win_surf = my_font.render(f'You won!', False, (255, 0, 0))
+bgm = pygame.mixer.Sound('audio/bgm.wav')
+bgm.set_volume(0.3)
 
 class Fruit:
     def __init__(self, snake):
@@ -43,11 +48,13 @@ class Fruit:
 
 class Snake:
     def __init__(self):
-        self.coordList = [(0,15),(1,15),(2,15)]
+        self.coordList = [(0,int(CELL_QUANTITY/2)),(1,int(CELL_QUANTITY/2)),(2,int(CELL_QUANTITY/2))]
         self.xMovement = 1
         self.yMovement = 0
         self.lastKeyInput = 'right'
         self.eaten = False
+        self.dead_sound = pygame.mixer.Sound('audio/dead.wav')
+        self.win_sound = pygame.mixer.Sound('audio/win.wav')
 
     def display_blocks(self):
         #displaying body
@@ -87,17 +94,26 @@ class Snake:
 
 
     def collisionWBody(self):
-        global gameActive
-        global CELL_QUANTITY
+        global gameActive, CELL_QUANTITY
         for coord in self.coordList:
             if self.coordList.count(coord) > 1:
+                self.dead_sound.play()
                 gameActive = False
             x,y = coord
             if (x<0 or x>CELL_QUANTITY) or (y<0 or y>CELL_QUANTITY):
-                time.sleep(2)
+                self.dead_sound.play()
                 gameActive = False
-   
+        
+
+    def winning(self):
+        global winning, gameActive, CELL_QUANTITY
+        if len(self.coordList) >= CELL_QUANTITY * CELL_QUANTITY:
+            winning = True
+            self.win_sound.play()
+            gameActive = False
+            
     def update(self):
+        self.winning()
         self.collisionWBody()
         self.display_blocks()
 
@@ -105,20 +121,25 @@ class Snake:
 class Controller:
     def __init__(self, snake, fruit):
         self.eaten = False
+        self.apple_sound = pygame.mixer.Sound('audio/apple.wav')
+        self.apple_sound.set_volume(3)
 
     #check if the fruit coords equals to the head coords
     def collision(self):
         global score, score_surf
-        if (fruit.x_pos,fruit.y_pos) == snake.coordList[-1]: self.eaten = True
+        if (fruit.x_pos,fruit.y_pos) == snake.coordList[-1]:
+            self.apple_sound.play()
+            self.eaten = True
+            
         if self.eaten == True:
             snake.eaten = True
             score += 1
-            print(score)
             #the fruit respawns to a new coord
             fruit.generate_position()
             self.eaten = False
             score_surf = my_font.render(f'score:{score}', False, (255, 0, 0))
-            
+        
+       
     def update(self):
         self.collision()
 
@@ -131,20 +152,29 @@ snake = Snake()
 fruit = Fruit(snake)
 controller = Controller(snake, fruit)
 
-while True:
+scoreList = list()
+#if gameActive:
+bgm.play(loops=-1)
+played = False   
+while True:   
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            with open('scores.txt', 'a') as file:
+                file.write(f'{str(max(scoreList))} \n')
             pygame.quit()
             sys.exit()
         
         if event.type == moving_snake_timer:
             snake.moving_blocks()
+            print(len(snake.coordList))
         if gameActive == False:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     #activate game, place fruit
                     gameActive = True
+                    played = True
                     score = 0
+                    if winning: winning=False
                     score_surf = my_font.render(f'score:{score}', False, (255, 0, 0))
                     fruit.generate_position()
 
@@ -161,12 +191,19 @@ while True:
 
         screen.blit(score_surf, (50, 50))
         
-    else:
+    else: 
         screen.fill((0,0,128))
         screen.blit(score_surf, (50, 50))
-        snake.coordList = [(0,15),(1,15),(2,15)]
+        
+        if winning: screen.blit(win_surf, (400,400))
+        elif winning == False and played: screen.blit(lose_surf, (400,400))
+        
+        snake.coordList = [(0,int(CELL_QUANTITY/2)),(1,int(CELL_QUANTITY/2)),(2,int(CELL_QUANTITY/2))]
         snake.lastKeyInput = 'right'
         snake.xMovement, snake.yMovement = 1,0
+        scoreList.append(score)
+        
+        
         
     pygame.display.update()
     clock.tick(60)
